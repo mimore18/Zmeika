@@ -1175,13 +1175,8 @@ def draw_game(game, text_renderer, font, font_small):
         text_renderer.draw(s(10), s(120), font_small, field_status, COLOR_TEXT)
         best_bot = max((bot.food_eaten for bot in game.bots), default=0)
         text_renderer.draw(
-            s(10), s(146), font_small,
+            s(10), s(150), font_small,
             f"Лучший бот: {best_bot}/{game.win_score}", COLOR_HINT,
-        )
-        text_renderer.draw_bottom_left(
-            s(10), WINDOW_HEIGHT, font_small,
-            f"Автоматическая победа: {game.score}/{game.win_score}",
-            COLOR_ACCENT, margin=s(10),
         )
         text_renderer.draw_bottom_center(
             WINDOW_WIDTH // 2, WINDOW_HEIGHT, font_small,
