@@ -114,7 +114,6 @@ STRINGS = {
         "personality_pack": "Стайный",
         "personality_collector": "Собиратель",
         "pack_status": "Стая: {hunters} → {target}",
-        "pack_alone": "Одиночки расходятся по полю",
     },
     "en": {
         "caption": "Snake Pit",
@@ -166,7 +165,6 @@ STRINGS = {
         "personality_pack": "Pack",
         "personality_collector": "Collector",
         "pack_status": "Pack: {hunters} → {target}",
-        "pack_alone": "Lone wolves are spreading out",
     },
 }
 
@@ -688,89 +686,279 @@ class Game:
                 danger += 1
         return danger
 
+    def victim_escape_cells(self, victim, blocked=None):
+        """Клетки, куда жертва ещё может уйти на следующем ходу.
+
+        Обратный ход невозможен, а клетки, занятые телами или чужими головами,
+        для жертвы смертельны. Чем меньше таких клеток, тем проще её окружить.
+        """
+        if blocked is None:
+            blocked = self.blocked_cells()
+
+        danger_heads = {
+            self.next_head(other)
+            for other in self.all_snakes()
+            if other is not victim and other.alive
+        }
+        vx, vy = victim.get_body()[0]
+        back = opposite(victim.direction)
+        cells = []
+        for direction in DIRECTIONS:
+            if direction == back:
+                continue
+            cell = (vx + direction[0], vy + direction[1])
+            if not self.in_bounds(cell):
+                continue
+            if cell in blocked or cell in danger_heads:
+                continue
+            cells.append(cell)
+        return cells
+
+    def target_score(self, bot, other, pack_counts=None, blocked=None):
+        """Насколько выгодно боту охотиться именно на эту змею."""
+        bot_x, bot_y = bot.get_body()[0]
+        other_x, other_y = other.get_body()[0]
+        score = abs(bot_x - other_x) + abs(bot_y - other_y)
+
+        length_gap = len(bot.get_body()) - len(other.get_body())
+        score += length_gap * 1.8
+
+        # Прижатая к стене жертва — удобная цель: у неё меньше путей отхода
+        wall = self.distance_to_wall((other_x, other_y))
+        score -= max(0.0, 4.0 - wall) * 1.6
+
+        # Чем больше у жертвы выходов, тем сложнее её поймать
+        escapes = len(self.victim_escape_cells(other, blocked))
+        score += escapes * 2.0
+
+        if other.is_player:
+            score -= 12.0
+
+        allies = 0
+        if pack_counts is not None:
+            allies = pack_counts.get(other, 0)
+        if allies:
+            # К уже начатой своре присоединяться выгоднее, чем искать новую цель
+            score -= min(2, allies) * 7.0 * max(0.25, bot.cooperation)
+        elif length_gap < -2:
+            # Одиночке не стоит гнаться за крупной змеёй
+            score += (-length_gap - 2) * 4.0
+
+        if bot.mode != "hunt" and not allies:
+            # Собирателю еды незачем бежать через полкарты за дракой
+            score += 4.0
+        return score
+
     def pick_target(self, bot):
         """Одиночная оценка добычи: игрок приоритетнее, боты рядом — тоже цель."""
-        bot_x, bot_y = bot.get_body()[0]
+        blocked = self.blocked_cells()
         target = None
         best_score = None
         for other in self.all_snakes():
             if other is bot or not other.alive:
                 continue
-            other_x, other_y = other.get_body()[0]
-            distance = abs(bot_x - other_x) + abs(bot_y - other_y)
-            # Крупный бот выбирает добычу поменьше, мелкий избегает гигантов
-            distance += (len(bot.get_body()) - len(other.get_body())) * 2.0
-            # Прижатая к стене жертва — удобная цель, у неё меньше путей отхода
-            if self.distance_to_wall((other_x, other_y)) <= 3:
-                distance -= 5.0
-            if other.is_player:
-                # Боты специально охотятся на игрока
-                distance -= 15
-            if best_score is None or distance < best_score:
+            score = self.target_score(bot, other, blocked=blocked)
+            if best_score is None or score < best_score:
                 target = other
-                best_score = distance
+                best_score = score
         return target
 
-    def choose_pack_targets(self):
-        """Координация стаи: охотники договариваются, кого будут есть вместе.
+    def pack_members(self, victim, exclude=None):
+        """Боты, которые прямо сейчас идут на эту жертву вместе с нами."""
+        members = []
+        for bot in self.bots:
+            if bot is exclude or not bot.alive or bot.goal != "kill":
+                continue
+            if self.hunt_targets.get(id(bot)) is victim:
+                members.append(bot)
+        return members
 
-        Отдельная жертва становится «вкуснее» по мере того, как к ней уже идут
-        другие боты, поэтому боты объединяются в своры против одной змеи,
-        окружают её с разных сторон и отрезают пути отхода. Слишком большие
-        стаи не собирём — в своре максимум трое.
+    def assign_pack_slots(self, victim, members, blocked):
+        """Раздаём членам своры разные точки вокруг жертвы.
+
+        Один давит спереди, второй заходит с фланга, третий перекрывает тыл.
+        Так жертва не может уйти в одну сторону, а боты не толпятся в одной
+        клетке и не мешают друг другу.
+        """
+        vx, vy = victim.get_body()[0]
+        dir_x, dir_y = victim.direction
+        side_x, side_y = -dir_y, dir_x
+
+        raw_slots = [
+            (vx + dir_x * 2, vy + dir_y * 2),                  # перед жертвой
+            (vx + dir_x + side_x * 2, vy + dir_y + side_y * 2),  # передний левый фланг
+            (vx + dir_x - side_x * 2, vy + dir_y - side_y * 2),  # передний правый фланг
+            (vx + side_x * 2, vy + side_y * 2),                  # левый бок
+            (vx - side_x * 2, vy - side_y * 2),                  # правый бок
+            (vx - dir_x * 2, vy - dir_y * 2),                    # тыл
+            (vx + dir_x * 3, vy + dir_y * 3),                    # дальний перехват
+            (vx + dir_x * 2 + side_x * 2, vy + dir_y * 2 + side_y * 2),
+            (vx + dir_x * 2 - side_x * 2, vy + dir_y * 2 - side_y * 2),
+        ]
+
+        next_heads = {
+            self.next_head(other)
+            for other in self.all_snakes()
+            if other.alive and other is not victim
+        }
+
+        slots = []
+        for x, y in raw_slots:
+            cell = self.clamp_point((x, y), margin=1)
+            if cell in slots or cell in blocked or cell in next_heads:
+                continue
+            if cell == victim.get_body()[0]:
+                continue
+            slots.append(cell)
+
+        members_sorted = sorted(
+            members,
+            key=lambda b: (
+                abs(b.get_body()[0][0] - vx) + abs(b.get_body()[0][1] - vy)
+            ),
+        )
+        claimed = []
+        total = len(members_sorted)
+        for index, bot in enumerate(members_sorted):
+            bot.pack_slot = None
+            bot.pack_role = "support"
+            if not slots:
+                continue
+
+            bx, by = bot.get_body()[0]
+
+            def slot_cost(cell):
+                cost = abs(cell[0] - bx) + abs(cell[1] - by)
+                # Точки не должны стоять вплотную: иначе свора мешает сама себе
+                for other in claimed:
+                    gap = abs(cell[0] - other[0]) + abs(cell[1] - other[1])
+                    if gap <= 1:
+                        cost += 10.0
+                    elif gap <= 2:
+                        cost += 2.5
+                return cost
+
+            chosen = min(slots, key=slot_cost)
+            slots.remove(chosen)
+            claimed.append(chosen)
+            bot.pack_slot = chosen
+            bot.pack_role = "lead" if index == 0 else ("flank" if index < total - 1 else "tail")
+
+    def choose_pack_targets(self):
+        """Стайная координация: боты договариваются, кого окружить.
+
+        Сначала сохраняются прошлые цели (чтобы свора не переключалась каждый
+        тик), затем остальные боты выбирают жертву с учётом уже собравшихся
+        свор. Самые наглые и общительные идут первыми и задают цель, остальные
+        подтягиваются к ним. Внутри своры каждому достаётся своя точка вокруг
+        жертвы — фронт, фланг или тыл.
         """
         result = {}
         packs = {}
+        blocked = self.blocked_cells()
+        self.pack_slot_claims = {}
 
         hunters = [
             bot for bot in self.bots
-            if bot.alive and bot.goal == "kill" and bot.mode == "hunt"
+            if bot.alive and bot.goal == "kill" and bot.fatigue_timer <= 0
         ]
+        for bot in hunters:
+            bot.pack_slot = None
+            bot.pack_size = 0
+            bot.pack_role = "solo"
 
-        for bot in sorted(hunters, key=lambda b: -b.aggression):
+        # 1. Запоминаем уже выбранные цели, чтобы стая не дёргалась каждый тик.
+        for bot in sorted(hunters, key=lambda b: (-b.cooperation, -b.aggression)):
+            target = bot.hunt_target
+            if target is None or not target.alive or bot.target_lock <= 0:
+                continue
+            if len(packs.get(target, [])) >= MAX_PACK_SIZE:
+                continue
+            packs.setdefault(target, []).append(bot)
+            result[id(bot)] = target
+            bot.target_lock -= 1
+
+        # 2. Остальные выбирают жертву, подтягиваясь к существующим сворам.
+        pack_counts = {target: len(members) for target, members in packs.items()}
+        for bot in sorted(hunters, key=lambda b: (-b.cooperation, -b.aggression)):
+            if id(bot) in result:
+                continue
+
             bot_x, bot_y = bot.get_body()[0]
             best = None
             best_score = None
             for other in self.all_snakes():
                 if other is bot or not other.alive:
                     continue
-                ox, oy = other.get_body()[0]
-                score = abs(bot_x - ox) + abs(bot_y - oy)
-                score += (len(bot.get_body()) - len(other.get_body())) * 2.0
-                if self.distance_to_wall((ox, oy)) <= 3:
-                    score -= 5.0
-                if other.is_player:
-                    score -= 15
-                # Присоединиться к идущей своре лучше, чем бродить одиночкой
-                allies = len(packs.get(other, []))
-                if allies:
-                    score -= 8.0 * min(allies, 2)
+                allies = pack_counts.get(other, 0)
+                if allies >= MAX_PACK_SIZE:
+                    continue
+                # Собирающий еду бот не бежит через всю карту в чужую драку
+                if bot.mode != "hunt" and allies:
+                    ox, oy = other.get_body()[0]
+                    if abs(bot_x - ox) + abs(bot_y - oy) > PACK_JOIN_RADIUS:
+                        continue
+                score = self.target_score(bot, other, pack_counts, blocked)
                 if best_score is None or score < best_score:
                     best = other
                     best_score = score
 
             if best is None:
+                # Все своры заполнены — берём ближайшую свободную жертву
+                for other in sorted(
+                    (
+                        snake for snake in self.all_snakes()
+                        if snake is not bot and snake.alive
+                    ),
+                    key=lambda snake: (
+                        abs(bot_x - snake.get_body()[0][0])
+                        + abs(bot_y - snake.get_body()[0][1])
+                    ),
+                ):
+                    if pack_counts.get(other, 0) < MAX_PACK_SIZE:
+                        best = other
+                        break
+
+            if best is None:
                 continue
-            # Слишком большая свора толкуче и мешает друг другу
-            if len(packs.get(best, [])) >= 3:
-                solo = self.pick_target(bot)
-                target = solo if solo is not None else best
-            else:
-                target = best
 
-            packs.setdefault(target, []).append(bot)
-            result[id(bot)] = target
+            packs.setdefault(best, []).append(bot)
+            pack_counts[best] = len(packs[best])
+            result[id(bot)] = best
+            bot.hunt_target = best
+            bot.target_lock = random.randint(*TARGET_LOCK_TICKS)
 
-        # Каждый член своры заходит со своей стороны жертвы
+        # 3. Распределяем роли и точки окружения.
         for victim, members in packs.items():
-            v_head = victim.get_body()[0]
-            dir_x, dir_y = victim.direction
+            if len(members) >= 2:
+                self.assign_pack_slots(victim, members, blocked)
             for bot in members:
-                bx, by = bot.get_body()[0]
-                cross = (bx - v_head[0]) * dir_y - (by - v_head[1]) * dir_x
-                bot.flank = 1 if cross > 0 else -1
+                bot.pack_size = len(members)
+                if bot.pack_slot is not None:
+                    self.pack_slot_claims[bot.pack_slot] = id(bot)
+
+        for bot in hunters:
+            if id(bot) not in result:
+                bot.hunt_target = None
+                bot.target_lock = 0
 
         return result
+
+    def pack_summary(self):
+        """Короткая строка для интерфейса: кто на кого охотится вместе."""
+        groups = {}
+        for bot in self.bots:
+            target = self.hunt_targets.get(id(bot))
+            if target is None or not target.alive:
+                continue
+            groups.setdefault(target, []).append(bot)
+        if not groups:
+            return ""
+        target, members = max(groups.items(), key=lambda item: len(item[1]))
+        if len(members) < 2:
+            return ""
+        hunters = ", ".join(bot.name for bot in members)
+        return tr("pack_status", hunters=hunters, target=target.name)
 
     def update_bot_behavior(self, bot):
         """Личность бота решает, когда он охотится, а когда идёт за едой."""
@@ -791,7 +979,9 @@ class Game:
                 bot.fatigue_timer -= 1
             return
 
-        target = self.pick_target(bot)
+        target = bot.hunt_target
+        if target is None or not target.alive:
+            target = self.pick_target(bot)
         if target is not None:
             bot_x, bot_y = bot.get_body()[0]
             target_x, target_y = target.get_body()[0]
@@ -876,11 +1066,11 @@ class Game:
             available.remove(target)
         return result
 
-    def crowd_penalty(self, cell, bot):
-        """Штраф за движение вплотную к другим ботам при сборе еды."""
+    def crowd_penalty(self, cell, bot, ignore=None):
+        """Штраф за движение вплотную к другим головам."""
         penalty = 0
         for other in self.all_snakes():
-            if other is bot or not other.alive:
+            if other is bot or other is ignore or not other.alive:
                 continue
             other_x, other_y = other.get_body()[0]
             distance = abs(cell[0] - other_x) + abs(cell[1] - other_y)
@@ -888,13 +1078,44 @@ class Game:
                 penalty += (3 - distance) * 2.0
         return penalty
 
+    def distance_field(self, target, blocked, limit=1200):
+        """BFS-расстояния от цели по свободным клеткам.
+
+        В отличие от манхэттенского расстояния, волна обходит тела змей и стены,
+        поэтому бот не застревает за чужой спиной, а ищет реальный проход.
+        """
+        if target is None or not self.in_bounds(target) or target in blocked:
+            return {}
+        field = {target: 0}
+        queue = deque([target])
+        while queue and len(field) < limit:
+            x, y = queue.popleft()
+            distance = field[(x, y)]
+            for dx, dy in DIRECTIONS:
+                nxt = (x + dx, y + dy)
+                if nxt in field or nxt in blocked or not self.in_bounds(nxt):
+                    continue
+                field[nxt] = distance + 1
+                queue.append(nxt)
+        return field
+
+    def path_distance(self, field, cell, target):
+        """Расстояние до цели: по BFS, либо запасная оценка, если пути нет."""
+        if target is None:
+            return 0.0
+        distance = field.get(cell)
+        if distance is None:
+            distance = abs(cell[0] - target[0]) + abs(cell[1] - target[1])
+            return distance * 1.6 + 3.0
+        return distance
+
     def attack_point(self, victim, bot=None, style="front"):
-        """Куда бот стремится: отрезать спереди или зайти в кольцо сбоку."""
+        """Куда бот стремится: отрезать спереди, зайти сбоку или в кольцо."""
         head_x, head_y = victim.get_body()[0]
         dir_x, dir_y = victim.direction
+        side_x, side_y = -dir_y, dir_x
 
         if style == "ring":
-            side_x, side_y = -dir_y, dir_x
             candidates = []
             for sign in (-1, 1):
                 attack_x = head_x + dir_x * 2 + side_x * 3 * sign
@@ -912,12 +1133,18 @@ class Game:
                 return candidates[0]
             return self.clamp_point((head_x, head_y))
 
+        if style == "pincer":
+            # Одиночный «стайный» бот тоже старается зайти с фланга
+            sign = bot.flank if bot is not None else 1
+            attack_x = head_x + dir_x * 2 + side_x * sign * 2
+            attack_y = head_y + dir_y * 2 + side_y * sign * 2
+            return self.clamp_point((attack_x, attack_y))
+
         if style == "back":
             # Забегаем вперёд по ходу жертвы и подставляем ей спину
             attack_x = head_x + dir_x * 3
             attack_y = head_y + dir_y * 3
             if bot is not None:
-                side_x, side_y = -dir_y, dir_x
                 attack_x += side_x * bot.flank * 2
                 attack_y += side_y * bot.flank * 2
             return self.clamp_point((attack_x, attack_y))
@@ -925,7 +1152,6 @@ class Game:
         attack_x, attack_y = head_x + dir_x * 2, head_y + dir_y * 2
         if bot is not None:
             # Каждый бот заходит со своего плеча, а не встаёт в общую очередь
-            side_x, side_y = -dir_y, dir_x
             attack_x += side_x * bot.flank
             attack_y += side_y * bot.flank
         return self.clamp_point((attack_x, attack_y))
@@ -950,75 +1176,67 @@ class Game:
                 reward += (steps - step + 1) * 2.0
         return reward
 
-    def pack_support_reward(self, new_head, bot, victim):
-        """Роль в своре: держим дистанцию стаи и подставляем фронт к жертве."""
-        if victim is None or victim is bot:
+    def pack_support_reward(self, new_head, bot, victim, pack_members):
+        """Держимся рядом со стаей, но не сбиваемся в одну клетку."""
+        if victim is None or victim is bot or not pack_members:
             return 0.0
 
         vx, vy = victim.get_body()[0]
         my_distance = abs(new_head[0] - vx) + abs(new_head[1] - vy)
-
-        allies = []
-        for other in self.bots:
-            if other is bot or not other.alive or other.goal != "kill":
-                continue
-            if self.hunt_targets.get(id(other)) is not victim:
-                continue
-            ox, oy = other.get_body()[0]
-            allies.append(abs(ox - vx) + abs(oy - vy))
-        if not allies:
+        ally_distances = [
+            abs(ally.get_body()[0][0] - vx) + abs(ally.get_body()[0][1] - vy)
+            for ally in pack_members
+        ]
+        if not ally_distances:
             return 0.0
 
-        closest = min(allies)
+        closest = min(ally_distances)
         reward = 0.0
-        if my_distance < closest:
-            # Идём впереди своры — берём на себя фронт атак
-            reward += 2.5
-        elif my_distance <= closest + 2:
-            # Держимся рядом, стая наступает стеной
-            reward += 1.4
-        if my_distance <= 3:
+        if my_distance <= closest + 2:
             reward += 1.0
+        if my_distance <= 4:
+            reward += 0.8
+
+        for ally in pack_members:
+            ax, ay = ally.get_body()[0]
+            gap = abs(new_head[0] - ax) + abs(new_head[1] - ay)
+            if gap == 0:
+                reward -= 2.0
+            elif gap == 1:
+                reward -= 0.6
         return reward
 
-    def escape_trap_reward(self, new_head, bot, victim):
-        """Насколько наш ход отрезает жертве пути отхода своим телом и сворой."""
+    def escape_trap_reward(self, new_head, bot, victim, escapes, ally_body_cells):
+        """Насколько ход перекрывает реальные пути отхода жертвы.
+
+        Учитываются только те клетки, куда жертва действительно может пойти.
+        Свою голову не ставим в такую клетку: это лобовое столкновение, а вот
+        тело на выходе — то, что нужно.
+        """
         if victim is None or victim is bot:
             return 0.0
+        if not escapes:
+            return 1.5
 
-        occupied = self.blocked_cells()
-        vx, vy = victim.get_body()[0]
-
-        # Тело бота после предполагаемого хода
         if bot.grow:
-            future_body = set(bot.get_body())
-            future_body.add(new_head)
+            body = [new_head] + bot.get_body()
         else:
-            future_body = set(bot.get_body()[:-1])
-            future_body.add(new_head)
-
-        # Головы союзников по своре; их тела тоже большинство клеток
-        allied_heads = []
-        for other in self.bots:
-            if other is bot or not other.alive or other.goal != "kill":
-                continue
-            if self.hunt_targets.get(id(other)) is victim:
-                ox, oy = other.get_body()[0]
-                allied_heads.append((ox, oy))
+            body = [new_head] + bot.get_body()[:-1]
+        own_cells = set(body[1:])
+        all_cells = own_cells | ally_body_cells
 
         reward = 0.0
-        for dx, dy in DIRECTIONS:
-            cell = (vx + dx, vy + dy)
-            if not self.in_bounds(cell):
-                continue
-            if cell in occupied:
-                continue  # этот путь уже закрыт, не трогаем
-            if cell == new_head or cell in future_body:
-                # нашим телом перекрываем выход
-                reward += 2.5
-            elif any(abs(cell[0] - hx) + abs(cell[1] - hy) <= 1 for hx, hy in allied_heads):
-                # путь закроет союзник
-                reward += 0.8
+        for cell in escapes:
+            if cell in own_cells:
+                reward += 3.0
+            elif cell in ally_body_cells:
+                reward += 0.5
+
+        covered = sum(1 for cell in escapes if cell in all_cells)
+        if len(escapes) >= 2 and covered >= len(escapes) - 1:
+            reward += 1.8
+        if covered == len(escapes):
+            reward += 4.0
         return reward
 
     def choose_bot_direction(self, bot):
@@ -1026,24 +1244,27 @@ class Game:
         personality = PERSONALITIES[bot.personality]
         fatigued = bot.fatigue_timer > 0
 
-        if fatigued or bot.goal == "score":
-            # Устал или идёт к автоматической победе: игнорируем охоту
-            target = None
-            attack = None
-            food_target = None
-            if self.foods:
-                food_target = self.food_targets.get(id(bot))
-                if food_target is None:
-                    food_target = min(
-                        self.foods,
-                        key=lambda food: abs(head_x - food[0]) + abs(head_y - food[1]),
-                    )
-        else:
-            # Даже собирая еду, боты давят на цель стаи (или на ближайшую)
-            target = self.hunt_targets.get(id(bot)) or self.pick_target(bot)
-            attack = self.attack_point(target, bot, bot.attack_style) if target else None
+        target = None
+        attack = None
+        food_target = None
+
+        if not fatigued and bot.goal != "score":
+            # Цель стаи; если её нет — выбираем сами
+            target = self.hunt_targets.get(id(bot))
+            if target is not None and not target.alive:
+                target = None
+            if target is None:
+                target = self.pick_target(bot)
+            if target is not None:
+                if bot.pack_slot is not None:
+                    # Своя точка окружения: фронт, фланг или тыл
+                    attack = bot.pack_slot
+                else:
+                    attack = self.attack_point(target, bot, bot.attack_style)
+
+        if self.foods:
             food_target = self.food_targets.get(id(bot))
-            if food_target is None and self.foods:
+            if food_target is None:
                 food_target = min(
                     self.foods,
                     key=lambda food: abs(head_x - food[0]) + abs(head_y - food[1]),
@@ -1054,6 +1275,20 @@ class Game:
             length_advantage = len(bot.get_body()) - len(target.get_body())
 
         blocked = self.blocked_cells()
+        attack_field = self.distance_field(attack, blocked) if attack is not None else {}
+        food_field = (
+            self.distance_field(food_target, blocked) if food_target is not None else {}
+        )
+
+        pack_members = []
+        escapes = []
+        ally_body_cells = set()
+        if target is not None:
+            pack_members = self.pack_members(target, exclude=bot)
+            escapes = self.victim_escape_cells(target, blocked)
+            for ally in pack_members:
+                ally_body_cells.update(self.body_after_move(ally)[1:])
+
         options = []
 
         for direction in DIRECTIONS:
@@ -1067,23 +1302,23 @@ class Game:
             space = self.open_space(new_head, blocked)
             danger = self.head_danger(new_head, bot)
 
-            if food_target is not None:
-                food_distance = (
-                    abs(new_head[0] - food_target[0]) + abs(new_head[1] - food_target[1])
-                )
-            else:
-                food_distance = 0
-
-            hunt_distance = 0
-            if attack is not None:
-                hunt_distance = abs(new_head[0] - attack[0]) + abs(new_head[1] - attack[1])
+            food_distance = (
+                self.path_distance(food_field, new_head, food_target)
+                if food_target is not None else 0.0
+            )
+            hunt_distance = (
+                self.path_distance(attack_field, new_head, attack)
+                if attack is not None else 0.0
+            )
 
             crowd = 0.0
             if bot.mode == "forage":
                 crowd = self.crowd_penalty(new_head, bot)
-            elif bot.mode == "hunt":
-                # Немного не любим идти строго друг за другом даже на охоте
-                crowd = self.crowd_penalty(new_head, bot) * 0.4
+            elif bot.pack_size > 1:
+                # В своре можно подойти вплотную к жертве, не мешая союзникам
+                crowd = self.crowd_penalty(new_head, bot, ignore=target) * 0.12
+            else:
+                crowd = self.crowd_penalty(new_head, bot, ignore=target) * 0.35
 
             # Награда за то, что тело оказалось на пути жертвы
             block = self.body_block_reward(new_head, bot, target)
@@ -1094,9 +1329,29 @@ class Game:
             # Кооперация: роль в своре и перекрытие путей отхода жертвы
             support = 0.0
             trap = 0.0
-            if target is not None and bot.mode == "hunt" and not fatigued:
-                support = self.pack_support_reward(new_head, bot, target)
-                trap = self.escape_trap_reward(new_head, bot, target)
+            if target is not None and not fatigued:
+                support = self.pack_support_reward(
+                    new_head, bot, target, pack_members
+                )
+                trap = self.escape_trap_reward(
+                    new_head, bot, target, escapes, ally_body_cells
+                )
+                if bot.mode != "hunt":
+                    support *= 0.5
+                    trap *= 0.5
+
+            # Не занимаем точку, которую уже занял союзник по этой же своре
+            ally_block = 0.0
+            for slot, owner in self.pack_slot_claims.items():
+                if owner == id(bot):
+                    continue
+                if self.hunt_targets.get(owner) is not target:
+                    continue
+                gap = abs(new_head[0] - slot[0]) + abs(new_head[1] - slot[1])
+                if gap == 0:
+                    ally_block += 3.0
+                elif gap == 1:
+                    ally_block += 0.8
 
             # Если жертва прижата к стене — используем это и давим к краю
             if target is not None:
@@ -1119,9 +1374,19 @@ class Game:
                 hunt_weight = personality["hunt_weight"]
                 if bot.mode != "hunt":
                     hunt_weight *= 0.55
-                # Чем агрессивнее бот, тем важнее сыграть со стаей сообща
-                support_weight = 1.1 * (0.5 + bot.aggression)
-                trap_weight = 1.4
+                support_weight = 0.9 * (0.5 + bot.cooperation)
+                trap_weight = 1.1 + 0.35 * max(0, bot.pack_size - 1)
+
+                if bot.pack_size > 1:
+                    # Вместе боты смелее: могут давить даже крупную жертву
+                    pack_boost = 1.0 + min(
+                        0.45, 0.12 * (bot.pack_size - 1) * bot.cooperation
+                    )
+                    hunt_weight *= pack_boost
+                    danger_weight = max(
+                        0.9, danger_weight - 0.25 * (bot.pack_size - 1)
+                    )
+                    trap_weight += 0.4
 
                 # Преимущество в длине: давим сильнее и смелее ставим тело
                 if length_advantage > 0:
@@ -1129,8 +1394,17 @@ class Game:
                     hunt_weight *= 1.0 + boldness
                     block_weight += min(0.8, length_advantage * 0.10)
                     danger_weight = max(
-                        1.6, 3.0 - min(1.2, length_advantage * 0.10)
+                        1.6, danger_weight - min(1.2, length_advantage * 0.10)
                     )
+                elif length_advantage < 0:
+                    if bot.pack_size <= 1:
+                        # Одиночке не стоит лезть на крупную змею в лоб
+                        danger_weight += min(1.8, -length_advantage * 0.18)
+                        hunt_weight *= 0.8
+                        block_weight *= 0.6
+                    else:
+                        # Даже в стае сохраняем немного осторожности
+                        danger_weight += min(0.7, -length_advantage * 0.06)
 
             # У стены еда всё равно стоит риска — разрешаем шаг на неё
             wall = self.wall_penalty(new_head, direction)
@@ -1146,8 +1420,9 @@ class Game:
                 - block * block_weight
                 - support * support_weight
                 - trap * trap_weight
+                + ally_block
                 + wall * wall_weight
-                + random.uniform(0.0, 0.6)
+                + random.uniform(0.0, 0.4)
             )
             options.append((score, direction))
 
@@ -1496,6 +1771,11 @@ def draw_game(game, text_renderer, font, font_small):
             s(10), s(150), font_small,
             tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
         )
+        pack_line = game.pack_summary()
+        if pack_line:
+            text_renderer.draw(
+                s(10), s(176), font_small, pack_line, COLOR_ACCENT,
+            )
         text_renderer.draw_bottom_center(
             WINDOW_WIDTH // 2, WINDOW_HEIGHT, font_small,
             tr("observe_hint"), COLOR_HINT, margin=s(10),
@@ -1517,6 +1797,11 @@ def draw_game(game, text_renderer, font, font_small):
         s(10), s(120), font_small,
         tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
     )
+    pack_line = game.pack_summary()
+    if pack_line:
+        text_renderer.draw(
+            s(10), s(146), font_small, pack_line, COLOR_ACCENT,
+        )
 
     text_renderer.draw_bottom_left(
         s(10), WINDOW_HEIGHT, font_small,
