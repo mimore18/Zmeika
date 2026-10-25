@@ -26,10 +26,10 @@ WIN_SCORE_BASE = 10
 
 # Сложность: название, количество ботов, количество еды
 DIFFICULTIES = [
-    ("Легко", 3, 6),
-    ("Нормально", DEFAULT_BOT_COUNT, 3),
-    ("Сложно", 5, 2),
-    ("Безумие", 7, 1),
+    ("easy", 3, 6),
+    ("normal", DEFAULT_BOT_COUNT, 3),
+    ("hard", 5, 2),
+    ("insane", 7, 1),
 ]
 DEFAULT_DIFFICULTY_INDEX = 1
 
@@ -52,6 +52,126 @@ COLOR_TITLE_RED = (240, 55, 60)
 COLOR_SETTING_RED = (225, 95, 100)
 COLOR_SETTING_SELECTED = (255, 60, 65)
 
+# Локализация
+LANGUAGES = [("ru", "Русский"), ("en", "English")]
+LANGUAGE_INDEX = 0
+LANGUAGE = LANGUAGES[LANGUAGE_INDEX][0]
+
+STRINGS = {
+    "ru": {
+        "caption": "Гадюшник",
+        "menu_title": "ГАДЮШНИК",
+        "menu_tagline": "Съешь их всех",
+        "menu_prompt": "Нажми любую кнопку",
+        "menu_exit": "Esc — выход",
+        "settings_title": "НАСТРОЙКИ",
+        "language": "Язык",
+        "difficulty": "Сложность",
+        "bots": "Количество ботов",
+        "food": "Количество еды",
+        "custom": "Своя",
+        "difficulty_easy": "Легко",
+        "difficulty_normal": "Нормально",
+        "difficulty_hard": "Сложно",
+        "difficulty_insane": "Безумие",
+        "field_line": "Поле: {value}",
+        "win_hint": "Для автоматической победы нужно: {score} очков",
+        "settings_controls": "↑ ↓ — выбор    ← → — изменить    Enter — играть    Esc — назад",
+        "score": "Счёт: {score}",
+        "bots_counter": "Боты: {alive}/{total}",
+        "food_counter": "Еда: {alive}/{total}",
+        "best_bot": "Лучший бот: {score}/{target}",
+        "auto_win": "Автоматическая победа: {score}/{target}",
+        "field_status_shrink": "Поле: {width}×{height} • сжатие через {seconds}с",
+        "field_status_min": "Поле: {width}×{height} • минимальное",
+        "you_died": "Ты погиб",
+        "place": "Место: {place} из {total}",
+        "observe_hint": "Наблюдение за ботами • Space — к итогам",
+        "victory": "ПОБЕДА!",
+        "defeat": "ПРОИГРЫШ",
+        "win_subtitle": "Автоматическая победа: {score} очков",
+        "score_line": "Счёт: {score} / {target}",
+        "winner_line": "Победитель: {name} ({title}) • {score}/{target}",
+        "end_controls": "R — играть снова    M — настройки    Esc — меню",
+        "lose_shrink": "Поле сжалось",
+        "lose_wall": "Ты врезался в стену",
+        "lose_self": "Ты врезался в собственное тело",
+        "lose_head_on": "Лобовое столкновение с ботом",
+        "lose_bot_body": "Голова коснулась тела бота",
+        "lose_bot_score": "{name} набрал {score} очков",
+        "lose_death": "Ты погиб",
+        "bot_name": "Бот {n}",
+        "player_name": "Ты",
+        "personality_hunter": "Охотник",
+        "personality_strategist": "Стратег",
+        "personality_bait": "Провокатор",
+        "personality_collector": "Собиратель",
+    },
+    "en": {
+        "caption": "Snake Pit",
+        "menu_title": "SNAKE PIT",
+        "menu_tagline": "Eat them all",
+        "menu_prompt": "Press any key",
+        "menu_exit": "Esc — quit",
+        "settings_title": "SETTINGS",
+        "language": "Language",
+        "difficulty": "Difficulty",
+        "bots": "Bots",
+        "food": "Food",
+        "custom": "Custom",
+        "difficulty_easy": "Easy",
+        "difficulty_normal": "Normal",
+        "difficulty_hard": "Hard",
+        "difficulty_insane": "Insane",
+        "field_line": "Field: {value}",
+        "win_hint": "Score needed for automatic win: {score}",
+        "settings_controls": "↑ ↓ — select    ← → — change    Enter — play    Esc — back",
+        "score": "Score: {score}",
+        "bots_counter": "Bots: {alive}/{total}",
+        "food_counter": "Food: {alive}/{total}",
+        "best_bot": "Best bot: {score}/{target}",
+        "auto_win": "Automatic win: {score}/{target}",
+        "field_status_shrink": "Field: {width}×{height} • shrinking in {seconds}s",
+        "field_status_min": "Field: {width}×{height} • minimal",
+        "you_died": "You died",
+        "place": "Place: {place} of {total}",
+        "observe_hint": "Watching the bots • Space — results",
+        "victory": "VICTORY!",
+        "defeat": "DEFEAT",
+        "win_subtitle": "Automatic win: {score} points",
+        "score_line": "Score: {score} / {target}",
+        "winner_line": "Winner: {name} ({title}) • {score}/{target}",
+        "end_controls": "R — play again    M — settings    Esc — menu",
+        "lose_shrink": "The field shrank",
+        "lose_wall": "You hit the wall",
+        "lose_self": "You hit your own body",
+        "lose_head_on": "Head-on collision with a bot",
+        "lose_bot_body": "Your head touched a bot's body",
+        "lose_bot_score": "{name} reached {score} points",
+        "lose_death": "You died",
+        "bot_name": "Bot {n}",
+        "player_name": "You",
+        "personality_hunter": "Hunter",
+        "personality_strategist": "Strategist",
+        "personality_bait": "Bait",
+        "personality_collector": "Collector",
+    },
+}
+
+
+def tr(key, **kwargs):
+    """Перевод по ключу для текущего языка."""
+    template = STRINGS.get(LANGUAGE, STRINGS["ru"]).get(key)
+    if template is None:
+        template = STRINGS["ru"].get(key, key)
+    return template.format(**kwargs) if kwargs else template
+
+
+def set_language(index):
+    global LANGUAGE_INDEX, LANGUAGE
+    LANGUAGE_INDEX = index % len(LANGUAGES)
+    LANGUAGE = LANGUAGES[LANGUAGE_INDEX][0]
+
 BOT_COLORS = [
     (0.95, 0.60, 0.20),
     (0.30, 0.60, 1.00),
@@ -66,7 +186,7 @@ BOT_COLORS = [
 # Личности ботов: характер, агрессивность и время переключения между охотой и едой
 PERSONALITIES = {
     "hunter": {
-        "title": "Охотник",
+        "title": "personality_hunter",
         "aggression": (1.3, 1.7),
         "food_weight": 0.50,
         "hunt_weight": 1.50,
@@ -81,7 +201,7 @@ PERSONALITIES = {
         "goal": "kill",
     },
     "strategist": {
-        "title": "Стратег",
+        "title": "personality_strategist",
         "aggression": (1.0, 1.3),
         "food_weight": 1.00,
         "hunt_weight": 1.20,
@@ -96,7 +216,7 @@ PERSONALITIES = {
         "goal": "kill",
     },
     "bait": {
-        "title": "Провокатор",
+        "title": "personality_bait",
         "aggression": (1.0, 1.3),
         "food_weight": 0.75,
         "hunt_weight": 1.15,
@@ -111,7 +231,7 @@ PERSONALITIES = {
         "goal": "kill",
     },
     "collector": {
-        "title": "Собиратель",
+        "title": "personality_collector",
         "aggression": (0.6, 0.9),
         "food_weight": 3.2,
         "hunt_weight": 0.0,
@@ -158,8 +278,8 @@ def field_label():
 
 def difficulty_label(index):
     if index is None:
-        return "Своя"
-    return DIFFICULTIES[index][0]
+        return tr("custom")
+    return tr(f"difficulty_{DIFFICULTIES[index][0]}")
 
 
 def match_difficulty(bot_count, food_count):
@@ -181,7 +301,7 @@ def win_score_for(bot_count, food_count):
 
 
 class Snake:
-    def __init__(self, head, direction, color, is_player=False, name="Бот", aggression=1.0):
+    def __init__(self, head, direction, color, is_player=False, name=None, aggression=1.0):
         x, y = head
         self.body = [(x - direction[0] * i, y - direction[1] * i) for i in range(SNAKE_LENGTH)]
         self.direction = direction
@@ -189,11 +309,11 @@ class Snake:
         self.grow = False
         self.color = color
         self.is_player = is_player
-        self.name = name
+        self.name = name if name is not None else tr("bot_name", n=1)
         self.place = None
         self.aggression = aggression
         self.personality = "hunter"
-        self.personality_title = "Охотник"
+        self.personality_title = tr("personality_hunter")
         self.goal = "kill"
         self.mode = "hunt"
         self.mode_timer = 0
@@ -242,7 +362,7 @@ class Game:
         self.arena_top = 0
         self.arena_bottom = GRID_HEIGHT - 1
         self.shrink_timer = SHRINK_GRACE_TICKS
-        self.player = Snake(self.player_spawn(), RIGHT, COLOR_SNAKE, is_player=True, name="Ты")
+        self.player = Snake(self.player_spawn(), RIGHT, COLOR_SNAKE, is_player=True, name=tr("player_name"))
         self.bots = []
         self.foods = []
         self.score = 0
@@ -309,11 +429,11 @@ class Game:
                 personality_key = PERSONALITY_ORDER[(i - 1) % len(PERSONALITY_ORDER)]
             personality = PERSONALITIES[personality_key]
             bot = Snake(
-                (x, y), direction, BOT_COLORS[i % len(BOT_COLORS)], name=f"Бот {i + 1}",
+                (x, y), direction, BOT_COLORS[i % len(BOT_COLORS)], name=tr("bot_name", n=i + 1),
                 aggression=random.uniform(*personality["aggression"]),
             )
             bot.personality = personality_key
-            bot.personality_title = personality["title"]
+            bot.personality_title = tr(personality["title"])
             bot.goal = personality.get("goal", "kill")
             bot.mode = personality["initial_mode"]
             if bot.mode == "hunt":
@@ -371,7 +491,7 @@ class Game:
             if any(not self.in_bounds(segment) for segment in snake.get_body()):
                 snake.alive = False
                 if snake.is_player:
-                    self.lose_reason = "Поле сжалось"
+                    self.lose_reason = tr("lose_shrink")
             else:
                 survivors.append(snake)
 
@@ -388,8 +508,14 @@ class Game:
     def field_status(self):
         if self.can_shrink():
             seconds = max(0, (self.shrink_timer + 9) // 10)
-            return f"Поле: {self.arena_width()}×{self.arena_height()} • сжатие через {seconds}с"
-        return f"Поле: {self.arena_width()}×{self.arena_height()} • минимальное"
+            return tr(
+                "field_status_shrink",
+                width=self.arena_width(), height=self.arena_height(), seconds=seconds,
+            )
+        return tr(
+            "field_status_min",
+            width=self.arena_width(), height=self.arena_height(),
+        )
 
     def food_target(self):
         return max(1, self.food_count)
@@ -879,11 +1005,11 @@ class Game:
             if not self.in_bounds(snake.get_body()[0]):
                 snake.alive = False
                 if snake.is_player:
-                    self.lose_reason = "Ты врезался в стену"
+                    self.lose_reason = tr("lose_wall")
             elif snake.get_body()[0] in snake.get_body()[1:]:
                 snake.alive = False
                 if snake.is_player:
-                    self.lose_reason = "Ты врезался в собственное тело"
+                    self.lose_reason = tr("lose_self")
 
         # Лобовые столкновения головами
         for i, first in enumerate(snakes):
@@ -892,9 +1018,9 @@ class Game:
                     first.alive = False
                     second.alive = False
                     if first.is_player:
-                        self.lose_reason = "Лобовое столкновение с ботом"
+                        self.lose_reason = tr("lose_head_on")
                     elif second.is_player:
-                        self.lose_reason = "Лобовое столкновение с ботом"
+                        self.lose_reason = tr("lose_head_on")
 
         # Голова коснулась тела другого персонажа (проверяем одновременно)
         contenders = [snake for snake in snakes if snake.alive]
@@ -906,7 +1032,7 @@ class Game:
                 if snake.get_body()[0] in other.get_body()[1:]:
                     dead_by_body.add(id(snake))
                     if snake.is_player:
-                        self.lose_reason = "Голова коснулась тела бота"
+                        self.lose_reason = tr("lose_bot_body")
                     break
         for snake in contenders:
             if id(snake) in dead_by_body:
@@ -954,7 +1080,7 @@ class Game:
         if goal_bot is not None:
             self.winner = goal_bot
             if self.player.alive:
-                self.lose_reason = f"{goal_bot.name} набрал {self.win_score} очков"
+                self.lose_reason = tr("lose_bot_score", name=goal_bot.name, score=self.win_score)
                 self.player_place = 1 + sum(
                     1
                     for snake in self.all_snakes()
@@ -1161,59 +1287,63 @@ def draw_game(game, text_renderer, font, font_small):
 
     if game.player_dead:
         place = game.player_place if game.player_place is not None else "—"
-        text_renderer.draw(s(10), s(10), font, "Ты погиб", (255, 90, 90))
+        text_renderer.draw(s(10), s(10), font, tr("you_died"), (255, 90, 90))
         text_renderer.draw(
             s(10), s(42), font_small,
-            f"Место: {place} из {game.total_participants}", COLOR_ACCENT,
+            tr("place", place=place, total=game.total_participants), COLOR_ACCENT,
         )
         text_renderer.draw(
-            s(10), s(68), font_small, f"Боты: {len(game.bots)}/{game.bot_count}", COLOR_TEXT
+            s(10), s(68), font_small,
+            tr("bots_counter", alive=len(game.bots), total=game.bot_count), COLOR_TEXT,
         )
         text_renderer.draw(
-            s(10), s(94), font_small, f"Еда: {len(game.foods)}/{game.food_count}", COLOR_TEXT
+            s(10), s(94), font_small,
+            tr("food_counter", alive=len(game.foods), total=game.food_count), COLOR_TEXT,
         )
         text_renderer.draw(s(10), s(120), font_small, field_status, COLOR_TEXT)
         best_bot = max((bot.food_eaten for bot in game.bots), default=0)
         text_renderer.draw(
             s(10), s(150), font_small,
-            f"Лучший бот: {best_bot}/{game.win_score}", COLOR_HINT,
+            tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
         )
         text_renderer.draw_bottom_center(
             WINDOW_WIDTH // 2, WINDOW_HEIGHT, font_small,
-            "Наблюдение за ботами • Space — к итогам", COLOR_HINT, margin=s(10),
+            tr("observe_hint"), COLOR_HINT, margin=s(10),
         )
         return
 
-    text_renderer.draw(s(10), s(10), font, f"Счёт: {game.score}", COLOR_TEXT)
+    text_renderer.draw(s(10), s(10), font, tr("score", score=game.score), COLOR_TEXT)
     text_renderer.draw(
-        s(10), s(42), font_small, f"Боты: {len(game.bots)}/{game.bot_count}", COLOR_TEXT
+        s(10), s(42), font_small,
+        tr("bots_counter", alive=len(game.bots), total=game.bot_count), COLOR_TEXT,
     )
     text_renderer.draw(
-        s(10), s(68), font_small, f"Еда: {len(game.foods)}/{game.food_count}", COLOR_TEXT
+        s(10), s(68), font_small,
+        tr("food_counter", alive=len(game.foods), total=game.food_count), COLOR_TEXT,
     )
     text_renderer.draw(s(10), s(94), font_small, field_status, COLOR_TEXT)
     best_bot = max((bot.food_eaten for bot in game.bots), default=0)
     text_renderer.draw(
         s(10), s(120), font_small,
-        f"Лучший бот: {best_bot}/{game.win_score}", COLOR_HINT,
+        tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
     )
 
     text_renderer.draw_bottom_left(
         s(10), WINDOW_HEIGHT, font_small,
-        f"Автоматическая победа: {game.score}/{game.win_score}",
+        tr("auto_win", score=game.score, target=game.win_score),
         COLOR_ACCENT, margin=s(10),
     )
 
 
 def draw_main_menu(text_renderer, font_title, font, font_small):
     text_renderer.draw_center(
-        WINDOW_WIDTH // 2, s(220), font_title, "ГАДЮШНИК", COLOR_TITLE_RED
+        WINDOW_WIDTH // 2, s(220), font_title, tr("menu_title"), COLOR_TITLE_RED
     )
     text_renderer.draw_center(
-        WINDOW_WIDTH // 2, s(540), font, "Съешь их всех", COLOR_TEXT
+        WINDOW_WIDTH // 2, s(540), font, tr("menu_tagline"), COLOR_TEXT
     )
 
-    prompt = "Нажми любую кнопку"
+    prompt = tr("menu_prompt")
     _, prompt_width, _ = text_renderer.render(font_small, prompt, COLOR_HINT)
     text_renderer.draw(
         WINDOW_WIDTH - prompt_width - s(30),
@@ -1222,17 +1352,22 @@ def draw_main_menu(text_renderer, font_title, font, font_small):
         prompt,
         COLOR_HINT,
     )
-    text_renderer.draw(s(30), WINDOW_HEIGHT - s(70), font_small, "Esc — выход", COLOR_HINT)
+    text_renderer.draw(
+        s(30), WINDOW_HEIGHT - s(70), font_small, tr("menu_exit"), COLOR_HINT
+    )
 
 
-def draw_settings(difficulty_index, bot_count, food_count, selected,
+def draw_settings(language_index, difficulty_index, bot_count, food_count, selected,
                   text_renderer, font_big, font, font_small):
-    text_renderer.draw_center(WINDOW_WIDTH // 2, s(90), font_big, "НАСТРОЙКИ", COLOR_TITLE_RED)
+    text_renderer.draw_center(
+        WINDOW_WIDTH // 2, s(90), font_big, tr("settings_title"), COLOR_TITLE_RED
+    )
 
     rows = [
-        ("Сложность", difficulty_label(difficulty_index)),
-        ("Количество ботов", str(bot_count)),
-        ("Количество еды", str(food_count)),
+        (tr("language"), LANGUAGES[language_index][1]),
+        (tr("difficulty"), difficulty_label(difficulty_index)),
+        (tr("bots"), str(bot_count)),
+        (tr("food"), str(food_count)),
     ]
 
     for i, (label, value) in enumerate(rows):
@@ -1242,7 +1377,7 @@ def draw_settings(difficulty_index, bot_count, food_count, selected,
         right = " ›" if is_selected else ""
         text_renderer.draw_center(
             WINDOW_WIDTH // 2,
-            s(240 + i * 85),
+            s(210 + i * 60),
             font,
             f"{label}:  {left}{value}{right}",
             color,
@@ -1250,23 +1385,23 @@ def draw_settings(difficulty_index, bot_count, food_count, selected,
 
     text_renderer.draw_center(
         WINDOW_WIDTH // 2,
-        s(470),
+        s(455),
         font_small,
-        f"Поле: {field_label()}",
+        tr("field_line", value=field_label()),
         COLOR_HINT,
     )
     text_renderer.draw_center(
         WINDOW_WIDTH // 2,
-        s(510),
+        s(495),
         font_small,
-        f"Для автоматической победы нужно: {win_score_for(bot_count, food_count)} очков",
+        tr("win_hint", score=win_score_for(bot_count, food_count)),
         COLOR_ACCENT,
     )
     text_renderer.draw_center(
         WINDOW_WIDTH // 2,
-        s(555),
+        s(545),
         font_small,
-        "↑ ↓ — выбор    ← → — изменить    Enter — играть    Esc — назад",
+        tr("settings_controls"),
         COLOR_TEXT,
     )
 
@@ -1275,23 +1410,26 @@ def draw_end_screen(game, won, text_renderer, font_big, font, font_small):
     draw_overlay()
 
     if won:
-        title = "ПОБЕДА!"
+        title = tr("victory")
         color = (110, 255, 150)
-        subtitle = f"Автоматическая победа: {game.win_score} очков"
-        place_line = f"Место: 1 из {game.total_participants}"
-        score_line = f"Счёт: {game.score} / {game.win_score}"
+        subtitle = tr("win_subtitle", score=game.win_score)
+        place_line = tr("place", place=1, total=game.total_participants)
+        score_line = tr("score_line", score=game.score, target=game.win_score)
     else:
-        title = "ПРОИГРЫШ"
+        title = tr("defeat")
         color = (255, 90, 90)
-        subtitle = game.lose_reason or "Ты погиб"
+        subtitle = game.lose_reason or tr("lose_death")
         place = game.player_place if game.player_place is not None else "—"
-        place_line = f"Место: {place} из {game.total_participants}"
-        score_line = f"Счёт: {game.score} / {game.win_score}"
+        place_line = tr("place", place=place, total=game.total_participants)
+        score_line = tr("score_line", score=game.score, target=game.win_score)
         winner_line = None
         if game.winner is not None and not game.winner.is_player:
-            winner_line = (
-                f"Победитель: {game.winner.name} ({game.winner.personality_title}) "
-                f"• {game.winner.food_eaten}/{game.win_score}"
+            winner_line = tr(
+                "winner_line",
+                name=game.winner.name,
+                title=game.winner.personality_title,
+                score=game.winner.food_eaten,
+                target=game.win_score,
             )
 
     text_renderer.draw_center(WINDOW_WIDTH // 2, s(150), font_big, title, color)
@@ -1304,7 +1442,7 @@ def draw_end_screen(game, won, text_renderer, font_big, font, font_small):
         WINDOW_WIDTH // 2,
         s(420),
         font_small,
-        "R — играть снова    M — настройки    Esc — меню",
+        tr("end_controls"),
         COLOR_TEXT,
     )
 
@@ -1339,9 +1477,11 @@ def make_fonts():
 
 def main():
     pygame.init()
-    pygame.display.set_caption("Гадюшник")
+    set_language(LANGUAGE_INDEX)
+    pygame.display.set_caption(tr("caption"))
     pygame.time.set_timer(USEREVENT, 100)
 
+    language_index = LANGUAGE_INDEX
     difficulty_index = DEFAULT_DIFFICULTY_INDEX
     _, bot_count, food_count = DIFFICULTIES[difficulty_index]
     selected_setting = 0
@@ -1371,10 +1511,14 @@ def main():
                         state = "menu"
                     elif event.key in (K_UP, K_DOWN):
                         delta = -1 if event.key == K_UP else 1
-                        selected_setting = (selected_setting + delta) % 3
+                        selected_setting = (selected_setting + delta) % 4
                     elif event.key in (K_LEFT, K_RIGHT):
                         delta = -1 if event.key == K_LEFT else 1
                         if selected_setting == 0:
+                            language_index = (language_index + delta) % len(LANGUAGES)
+                            set_language(language_index)
+                            pygame.display.set_caption(tr("caption"))
+                        elif selected_setting == 1:
                             # Сложность задаёт ботов и еду сразу
                             if difficulty_index is None:
                                 new_index = 0
@@ -1383,7 +1527,7 @@ def main():
                             new_index = max(0, min(len(DIFFICULTIES) - 1, new_index))
                             difficulty_index = new_index
                             _, bot_count, food_count = DIFFICULTIES[new_index]
-                        elif selected_setting == 1:
+                        elif selected_setting == 2:
                             bot_count = max(MIN_BOTS, min(MAX_BOTS, bot_count + delta))
                             difficulty_index = match_difficulty(bot_count, food_count)
                         else:
@@ -1437,6 +1581,7 @@ def main():
             draw_main_menu(text_renderer, font_title, font, font_small)
         elif state == "settings":
             draw_settings(
+                language_index,
                 difficulty_index,
                 bot_count,
                 food_count,
