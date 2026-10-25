@@ -587,7 +587,7 @@ class Game:
         return snake.get_body()[:-1]
 
     def next_head(self, snake, direction=None):
-        move = direction if direction is not None else snake.direction
+        move = direction if direction is not None else snake.next_direction
         head_x, head_y = snake.get_body()[0]
         return (head_x + move[0], head_y + move[1])
 
@@ -779,7 +779,7 @@ class Game:
         клетке и не мешают друг другу.
         """
         vx, vy = victim.get_body()[0]
-        dir_x, dir_y = victim.direction
+        dir_x, dir_y = victim.next_direction
         side_x, side_y = -dir_y, dir_x
 
         raw_slots = [
@@ -1107,7 +1107,7 @@ class Game:
     def attack_point(self, victim, bot=None, style="front"):
         """Куда бот стремится: отрезать спереди, зайти сбоку или в кольцо."""
         head_x, head_y = victim.get_body()[0]
-        dir_x, dir_y = victim.direction
+        dir_x, dir_y = victim.next_direction
         side_x, side_y = -dir_y, dir_x
 
         if style == "ring":
@@ -1163,7 +1163,7 @@ class Game:
         blocking = set(body[1:])
 
         victim_x, victim_y = victim.get_body()[0]
-        dir_x, dir_y = victim.direction
+        dir_x, dir_y = victim.next_direction
         reward = 0.0
         for step in range(1, steps + 1):
             cell = (victim_x + dir_x * step, victim_y + dir_y * step)
