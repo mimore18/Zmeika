@@ -113,7 +113,6 @@ STRINGS = {
         "personality_bait": "Провокатор",
         "personality_pack": "Стайный",
         "personality_collector": "Собиратель",
-        "pack_status": "Стая: {hunters} → {target}",
     },
     "en": {
         "caption": "Snake Pit",
@@ -164,7 +163,6 @@ STRINGS = {
         "personality_bait": "Bait",
         "personality_pack": "Pack",
         "personality_collector": "Collector",
-        "pack_status": "Pack: {hunters} → {target}",
     },
 }
 
@@ -867,16 +865,29 @@ class Game:
             bot.pack_size = 0
             bot.pack_role = "solo"
 
+        previous_groups = {}
+        for bot in hunters:
+            target = bot.hunt_target
+            if target is not None and target.alive:
+                previous_groups.setdefault(target, []).append(bot)
+
         # 1. Запоминаем уже выбранные цели, чтобы стая не дёргалась каждый тик.
         for bot in sorted(hunters, key=lambda b: (-b.cooperation, -b.aggression)):
             target = bot.hunt_target
-            if target is None or not target.alive or bot.target_lock <= 0:
+            if target is None or not target.alive:
+                continue
+            # Если бот уже в своре, он держится за цель до победного конца
+            sticky = len(previous_groups.get(target, [])) >= 2 and bot.mode == "hunt"
+            if bot.target_lock <= 0 and not sticky:
                 continue
             if len(packs.get(target, [])) >= MAX_PACK_SIZE:
                 continue
             packs.setdefault(target, []).append(bot)
             result[id(bot)] = target
-            bot.target_lock -= 1
+            if sticky and bot.target_lock <= 0:
+                bot.target_lock = random.randint(*TARGET_LOCK_TICKS)
+            else:
+                bot.target_lock -= 1
 
         # 2. Остальные выбирают жертву, подтягиваясь к существующим сворам.
         pack_counts = {target: len(members) for target, members in packs.items()}
@@ -943,22 +954,6 @@ class Game:
                 bot.target_lock = 0
 
         return result
-
-    def pack_summary(self):
-        """Короткая строка для интерфейса: кто на кого охотится вместе."""
-        groups = {}
-        for bot in self.bots:
-            target = self.hunt_targets.get(id(bot))
-            if target is None or not target.alive:
-                continue
-            groups.setdefault(target, []).append(bot)
-        if not groups:
-            return ""
-        target, members = max(groups.items(), key=lambda item: len(item[1]))
-        if len(members) < 2:
-            return ""
-        hunters = ", ".join(bot.name for bot in members)
-        return tr("pack_status", hunters=hunters, target=target.name)
 
     def update_bot_behavior(self, bot):
         """Личность бота решает, когда он охотится, а когда идёт за едой."""
@@ -1771,11 +1766,6 @@ def draw_game(game, text_renderer, font, font_small):
             s(10), s(150), font_small,
             tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
         )
-        pack_line = game.pack_summary()
-        if pack_line:
-            text_renderer.draw(
-                s(10), s(176), font_small, pack_line, COLOR_ACCENT,
-            )
         text_renderer.draw_bottom_center(
             WINDOW_WIDTH // 2, WINDOW_HEIGHT, font_small,
             tr("observe_hint"), COLOR_HINT, margin=s(10),
@@ -1797,11 +1787,6 @@ def draw_game(game, text_renderer, font, font_small):
         s(10), s(120), font_small,
         tr("best_bot", score=best_bot, target=game.win_score), COLOR_HINT,
     )
-    pack_line = game.pack_summary()
-    if pack_line:
-        text_renderer.draw(
-            s(10), s(146), font_small, pack_line, COLOR_ACCENT,
-        )
 
     text_renderer.draw_bottom_left(
         s(10), WINDOW_HEIGHT, font_small,
